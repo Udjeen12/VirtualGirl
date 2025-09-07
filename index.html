@@ -5,8 +5,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <!-- Подключаем TensorFlow.js -->
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.18.0"></script>
+    <!-- Подключаем natural для стемминга -->
+    <script src="https://cdn.jsdelivr.net/npm/natural@6.6.0/lib/natural.min.js"></script>
     <style>
         /* Стили остаются без изменений */
         body {
@@ -157,24 +158,148 @@
         let mood = 50;
         let model;
         let isTraining = false;
+        let stemmer = null;
 
-        // Списки слов для анализа тональности
+        // Инициализация стеммера
+        function initStemmer() {
+            try {
+                // Создаем русский стеммер из библиотеки natural
+                stemmer = natural.PorterStemmerRu;
+                console.log("Стеммер инициализирован");
+            } catch (error) {
+                console.error("Ошибка инициализации стеммера:", error);
+                // Фолбэк на простую функцию
+                stemmer = {
+                    stem: function(word) {
+                        return word.toLowerCase();
+                    }
+                };
+            }
+        }
+
+        // Списки слов в основной форме
         const badWords = [
-            'дурак', 'идиот', 'тупой', 'урод', 'ненавижу', 'надоел', 'отвратительно',
-            'гадость', 'мерзость', 'противный', 'скучно', 'бесишь', 'злой', 'злая',
-            'плохой', 'плохая', 'отвращение', 'фи', 'фу', 'терпеть', 'ненависть',
-            'уйди', 'отстань', 'надоело', 'достал', 'достала', 'кошмар', 'ужас',
-            'отврат', 'мерзко', 'противно'
+            'дурак', 'идиот', 'тупой', 'урод', 'ненавидеть', 'надоедать', 'отвратительный',
+            'гадость', 'мерзость', 'противный', 'скучный', 'бесить', 'злой', 'плохой',
+            'фи', 'фу', 'терпеть', 'уйти', 'отстать', 'доставать', 'кошмар', 'ужас',
+            'глупый', 'некрасивый', 'мерзкий', 'противный', 'дебил', 'кретин', 'скотина',
+            'сволочь', 'подонок', 'мудак', 'отчислять', 'убогий', 'жалкий', 'ничтожный',
+            'сука', 'блять', 'хуй', 'пизда', 'ебать', 'гондон', 'пидор', 'мусор'
         ];
 
         const goodWords = [
-            'люблю', 'нравишься', 'красивый', 'красивая', 'умный', 'умная', 'милый',
-            'милая', 'добрый', 'добрая', 'лапочка', 'зайка', 'солнышко', 'радость',
-            'счастье', 'восхитительно', 'прекрасно', 'замечательно', 'великолепно',
-            'обожаю', 'восторг', 'нежность', 'ласка', 'мечта', 'ангел', 'чудо',
-            'восхищаюсь', 'обожаю', 'нрав', 'симпатия', 'приятно', 'хорошо'
+            'любить', 'нравиться', 'красивый', 'умный', 'милый', 'добрый', 'лапочка', 'зайка',
+            'солнышко', 'радость', 'счастье', 'восхитительный', 'прекрасный', 'замечательный',
+            'великолепный', 'обожать', 'восторг', 'нежность', 'ласка', 'мечта', 'ангел', 'чудо',
+            'симпатия', 'приятный', 'хороший', 'милый', 'прелестный', 'очаровательный', 'восхищаться'
         ];
 
+        // Предварительно получаем стеммы для всех слов
+        let badStems = new Set();
+        let goodStems = new Set();
+
+        function initWordStems() {
+            badWords.forEach(word => {
+                const stem = stemmer.stem(word);
+                badStems.add(stem);
+                console.log("Плохое слово:", word, "-> Стемма:", stem);
+            });
+
+            goodWords.forEach(word => {
+                const stem = stemmer.stem(word);
+                goodStems.add(stem);
+                console.log("Хорошее слово:", word, "-> Стемма:", stem);
+            });
+        }
+
+        // Улучшенная функция анализа тональности с использованием стемминга
+        function analyzeMessage(message) {
+            if (!stemmer) {
+                console.error("Стеммер не инициализирован");
+                return 0;
+            }
+
+            const words = message.toLowerCase()
+                .replace(/[^\w\sа-яё]/gi, ' ')
+                .split(/\s+/)
+                .filter(word => word.length > 2);
+
+            let score = 0;
+            let foundBadWords = [];
+            let foundGoodWords = [];
+
+            // Анализируем каждое слово
+            words.forEach(word => {
+                try {
+                    const stem = stemmer.stem(word);
+
+                    // Проверяем плохие стеммы
+                    if (badStems.has(stem)) {
+                        score -= 4; // Сильное негативное влияние
+                        foundBadWords.push({word, stem});
+                    }
+
+                    // Проверяем хорошие стеммы
+                    if (goodStems.has(stem)) {
+                        score += 3; // Положительное влияние
+                        foundGoodWords.push({word, stem});
+                    }
+
+                } catch (error) {
+                    console.error("Ошибка при обработке слова:", word, error);
+                }
+            });
+
+            // Дополнительные факторы
+            const text = message.toLowerCase();
+            if (text.includes('?') && text.length > 10) {
+                score += 1;
+            }
+
+            if (text.length < 3) {
+                score -= 1;
+            }
+
+            if (text.includes('!')) {
+                score += 1;
+            }
+
+            // Сильные негативные фразы
+            const strongNegativePhrases = [
+                'ненавижу тебя', 'ты мне не нравишься', 'уйди от меня',
+                'надоел ты мне', 'отвратительно', 'мерзко', 'противно'
+            ];
+
+            strongNegativePhrases.forEach(phrase => {
+                if (text.includes(phrase)) {
+                    score -= 6;
+                    foundBadWords.push({word: phrase, stem: 'phrase'});
+                }
+            });
+
+            // Сильные позитивные фразы
+            const strongPositivePhrases = [
+                'люблю тебя', 'обожаю тебя', 'ты лучший', 'ты прекрасна',
+                'мне нравишься', 'ты красивая', 'ты умная'
+            ];
+
+            strongPositivePhrases.forEach(phrase => {
+                if (text.includes(phrase)) {
+                    score += 5;
+                    foundGoodWords.push({word: phrase, stem: 'phrase'});
+                }
+            });
+
+            // Отладочная информация
+            console.log('Сообщение:', message);
+            console.log('Найденные плохие слова:', foundBadWords);
+            console.log('Найденные хорошие слова:', foundGoodWords);
+            console.log('Итоговый score:', score);
+
+            return score;
+        }
+
+        // Остальные функции остаются без изменений...
         const trainingData = [
             "Привет! Как твои дела?",
             "Я так рада тебя видеть!",
@@ -188,106 +313,18 @@
             "Ты мне так нравишься!"
         ];
 
-        // Функция анализа тональности сообщения
-        function analyzeMessage(message) {
-            const text = message.toLowerCase();
-            let score = 0;
-
-            // Проверяем плохие слова
-            badWords.forEach(word => {
-                if (text.includes(word)) {
-                    score -= 3; // Сильное негативное влияние
-                }
-            });
-
-            // Проверяем хорошие слова
-            goodWords.forEach(word => {
-                if (text.includes(word)) {
-                    score += 2; // Положительное влияние
-                }
-            });
-
-            // Дополнительные факторы
-            if (text.includes('?') && text.length > 10) {
-                score += 1; // Вопросы показывают интерес
-            }
-
-            if (text.length < 3) {
-                score -= 1; // Слишком короткие сообщения
-            }
-
-            if (text.includes('!')) {
-                score += 1; // Восклицания показывают эмоции
-            }
-
-            return score;
-        }
-
-        // Инициализация модели машинного обучения
-        async function initModel() {
-            try {
-                model = tf.sequential();
-
-                // Добавляем слои LSTM для генерации текста
-                model.add(tf.layers.lstm({
-                    units: 64,
-                    inputShape: [10, 256],
-                    returnSequences: true
-                }));
-
-                model.add(tf.layers.dropout({rate: 0.2}));
-                model.add(tf.layers.lstm({units: 32}));
-                model.add(tf.layers.dense({units: 128, activation: 'relu'}));
-                model.add(tf.layers.dense({
-                    units: trainingData.join(' ').length,
-                    activation: 'softmax'
-                }));
-
-                model.compile({
-                    optimizer: 'adam',
-                    loss: 'categoricalCrossentropy'
-                });
-
-                await trainModel();
-                addMessage("Система", "AI модель загружена и готова к общению! 🚀");
-            } catch (error) {
-                console.error("Ошибка инициализации модели:", error);
-                addMessage("Система", "Используется базовый режим общения");
-            }
-        }
-
-        // Обучение модели на наших данных
-        async function trainModel() {
-            if (isTraining) return;
-
-            isTraining = true;
-            addMessage("Система", "Девушка учится общаться... 📚");
-
-            try {
-                // Преобразуем текст в числовые векторы
-                const text = trainingData.join(' ');
-                const chars = Array.from(new Set(text));
-                const charIndices = {};
-                const indicesChar = {};
-
-                chars.forEach((char, i) => {
-                    charIndices[char] = i;
-                    indicesChar[i] = char;
-                });
-
-                addMessage("Система", "Обучение завершено! 🎓");
-            } catch (error) {
-                console.error("Ошибка обучения:", error);
-            }
-
-            isTraining = false;
-        }
-
-        // Генерация ответа с помощью ML
+        // Функция для генерации ответа с учетом тональности
         function generateResponse(userInput, moodScore) {
-            // Выбираем разные ответы в зависимости от тональности
-            if (moodScore < -2) {
-                // Ответы на негативные сообщения
+            if (moodScore < -5) {
+                const verySadResponses = [
+                    "Я так расстроена... Может, я заслужила это? 😭",
+                    "Зачем ты так со мной? Мне очень больно... 💔",
+                    "Я попробую стать лучше, пожалуйста, не злись... 😢",
+                    "Мое сердце разбивается от таких слов...",
+                    "Я не хочу ссориться, давай помиримся? 🥺"
+                ];
+                return verySadResponses[Math.floor(Math.random() * verySadResponses.length)];
+            } else if (moodScore < -2) {
                 const sadResponses = [
                     "Мне грустно это слышать... 😔",
                     "Почему ты так говоришь? Я расстроена...",
@@ -296,8 +333,16 @@
                     "Прости, если я что-то сделала не так... 😢"
                 ];
                 return sadResponses[Math.floor(Math.random() * sadResponses.length)];
+            } else if (moodScore > 5) {
+                const veryHappyResponses = [
+                    "Ты делаешь меня самой счастливой в мире! 💖",
+                    "Я плачу от счастья! Ты такой wonderful! 😭💕",
+                    "Мое сердце трепещет от твоих слов! 💘",
+                    "Ты самый лучший человек на свете! 🌟",
+                    "Я обожаю тебя всем своим цифровым сердцем! 💝"
+                ];
+                return veryHappyResponses[Math.floor(Math.random() * veryHappyResponses.length)];
             } else if (moodScore > 2) {
-                // Ответы на позитивные сообщения
                 const happyResponses = [
                     "Это так мило с твоей стороны! 💖",
                     "Ты делаешь меня такой счастливой! 😊",
@@ -307,20 +352,67 @@
                 ];
                 return happyResponses[Math.floor(Math.random() * happyResponses.length)];
             } else {
-                // Нейтральные ответы
-                if (Math.random() > 0.3 && model) {
-                    const responses = [
-                        "Это так интересно! Расскажи подробнее?",
-                        "Я об этом никогда не думала...",
-                        "Ты всегда меня удивляешь!",
-                        "Как здорово! Я рада это слышать!",
-                        "Продолжай, мне нравится твой рассказ!"
+                if (Math.random() > 0.3) {
+                    const neutralResponses = [
+                        "Интересно! Расскажи еще?",
+                        "Я внимательно слушаю...",
+                        "Как любопытно!",
+                        "Продолжай, мне нравится твой рассказ!",
+                        "Ух ты! Я никогда об этом не думала!"
                     ];
-                    return responses[Math.floor(Math.random() * responses.length)];
+                    return neutralResponses[Math.floor(Math.random() * neutralResponses.length)];
                 } else {
                     return trainingData[Math.floor(Math.random() * trainingData.length)];
                 }
             }
+        }
+
+        // Инициализация модели
+        async function initModel() {
+            try {
+                model = tf.sequential();
+                model.add(tf.layers.lstm({
+                    units: 64,
+                    inputShape: [10, 256],
+                    returnSequences: true
+                }));
+                model.add(tf.layers.dropout({rate: 0.2}));
+                model.add(tf.layers.lstm({units: 32}));
+                model.add(tf.layers.dense({units: 128, activation: 'relu'}));
+                model.add(tf.layers.dense({
+                    units: trainingData.join(' ').length,
+                    activation: 'softmax'
+                }));
+                model.compile({
+                    optimizer: 'adam',
+                    loss: 'categoricalCrossentropy'
+                });
+                await trainModel();
+                addMessage("Система", "AI модель загружена и готова к общению! 🚀");
+            } catch (error) {
+                console.error("Ошибка инициализации модели:", error);
+                addMessage("Система", "Используется базовый режим общения");
+            }
+        }
+
+        async function trainModel() {
+            if (isTraining) return;
+            isTraining = true;
+            addMessage("Система", "Девушка учится общаться... 📚");
+            try {
+                const text = trainingData.join(' ');
+                const chars = Array.from(new Set(text));
+                const charIndices = {};
+                const indicesChar = {};
+                chars.forEach((char, i) => {
+                    charIndices[char] = i;
+                    indicesChar[i] = char;
+                });
+                addMessage("Система", "Обучение завершено! 🎓");
+            } catch (error) {
+                console.error("Ошибка обучения:", error);
+            }
+            isTraining = false;
         }
 
         function updateMoodVisual() {
@@ -328,7 +420,6 @@
             const emoji = document.getElementById('girl-emoji');
             const moodValue = document.getElementById('mood-value');
 
-            // Ограничиваем настроение от 0 до 100
             mood = Math.max(0, Math.min(100, mood));
             moodValue.textContent = mood;
 
@@ -392,7 +483,6 @@
             chatMessages.appendChild(changeDiv);
             chatMessages.scrollTop = chatMessages.scrollHeight;
 
-            // Автоудаление через 3 секунды
             setTimeout(() => {
                 if (changeDiv.parentNode) {
                     changeDiv.parentNode.removeChild(changeDiv);
@@ -408,11 +498,9 @@
                 addMessage("Вы", message);
                 userInput.value = '';
 
-                // Анализируем тональность сообщения
                 const moodScore = analyzeMessage(message);
                 let moodChange = moodScore;
 
-                // Показываем анимацию набора текста
                 const chatMessages = document.getElementById('chat-messages');
                 const typingIndicator = document.createElement('div');
                 typingIndicator.className = 'message bot-message';
@@ -420,21 +508,15 @@
                 chatMessages.appendChild(typingIndicator);
                 chatMessages.scrollTop = chatMessages.scrollHeight;
 
-                // Имитируем задержку для "думания"
                 setTimeout(() => {
                     chatMessages.removeChild(typingIndicator);
-
-                    // Генерируем ответ с учетом тональности
                     const aiResponse = generateResponse(message, moodScore);
                     addMessage("Девушка", aiResponse);
-
-                    // Изменяем настроение
                     if (moodChange !== 0) {
                         mood += moodChange;
                         showMoodChange(moodChange);
                         updateMoodVisual();
                     }
-
                 }, 1500 + Math.random() * 1000);
             }
         }
@@ -443,10 +525,13 @@
         let tg = window.Telegram.WebApp;
         tg.expand();
         tg.MainButton.setText("Назад").show().onClick(() => tg.close());
-
         document.getElementById('user-input').addEventListener('keypress', (e) => {
             if (e.key === 'Enter') sendMessage();
         });
+
+        // Инициализируем стеммер и слова
+        initStemmer();
+        initWordStems();
 
         // Запускаем ML-модель при загрузке
         initModel();
