@@ -8,6 +8,7 @@
     <!-- Подключаем TensorFlow.js -->
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.18.0"></script>
     <style>
+        /* Стили остаются без изменений */
         body {
             font-family: Arial, sans-serif;
             text-align: center;
@@ -117,6 +118,13 @@
             0%, 100% { opacity: 0.3; }
             50% { opacity: 1; }
         }
+
+        .mood-change {
+            font-size: 12px;
+            color: #666;
+            text-align: center;
+            margin: 5px 0;
+        }
     </style>
 </head>
 <body>
@@ -124,6 +132,10 @@
 
     <div class="girl-container" id="girl-avatar">
         <span id="girl-emoji">😊</span>
+    </div>
+
+    <div id="mood-indicator">
+        Настроение: <span id="mood-value">50</span>/100
     </div>
 
     <div>
@@ -145,6 +157,24 @@
         let mood = 50;
         let model;
         let isTraining = false;
+
+        // Списки слов для анализа тональности
+        const badWords = [
+            'дурак', 'идиот', 'тупой', 'урод', 'ненавижу', 'надоел', 'отвратительно',
+            'гадость', 'мерзость', 'противный', 'скучно', 'бесишь', 'злой', 'злая',
+            'плохой', 'плохая', 'отвращение', 'фи', 'фу', 'терпеть', 'ненависть',
+            'уйди', 'отстань', 'надоело', 'достал', 'достала', 'кошмар', 'ужас',
+            'отврат', 'мерзко', 'противно'
+        ];
+
+        const goodWords = [
+            'люблю', 'нравишься', 'красивый', 'красивая', 'умный', 'умная', 'милый',
+            'милая', 'добрый', 'добрая', 'лапочка', 'зайка', 'солнышко', 'радость',
+            'счастье', 'восхитительно', 'прекрасно', 'замечательно', 'великолепно',
+            'обожаю', 'восторг', 'нежность', 'ласка', 'мечта', 'ангел', 'чудо',
+            'восхищаюсь', 'обожаю', 'нрав', 'симпатия', 'приятно', 'хорошо'
+        ];
+
         const trainingData = [
             "Привет! Как твои дела?",
             "Я так рада тебя видеть!",
@@ -157,6 +187,41 @@
             "Спасибо, что ты есть у меня",
             "Ты мне так нравишься!"
         ];
+
+        // Функция анализа тональности сообщения
+        function analyzeMessage(message) {
+            const text = message.toLowerCase();
+            let score = 0;
+
+            // Проверяем плохие слова
+            badWords.forEach(word => {
+                if (text.includes(word)) {
+                    score -= 3; // Сильное негативное влияние
+                }
+            });
+
+            // Проверяем хорошие слова
+            goodWords.forEach(word => {
+                if (text.includes(word)) {
+                    score += 2; // Положительное влияние
+                }
+            });
+
+            // Дополнительные факторы
+            if (text.includes('?') && text.length > 10) {
+                score += 1; // Вопросы показывают интерес
+            }
+
+            if (text.length < 3) {
+                score -= 1; // Слишком короткие сообщения
+            }
+
+            if (text.includes('!')) {
+                score += 1; // Восклицания показывают эмоции
+            }
+
+            return score;
+        }
 
         // Инициализация модели машинного обучения
         async function initModel() {
@@ -210,9 +275,6 @@
                     indicesChar[i] = char;
                 });
 
-                // Здесь должна быть более сложная подготовка данных для LSTM
-                // Для простоты используем случайный выбор из trainingData
-
                 addMessage("Система", "Обучение завершено! 🎓");
             } catch (error) {
                 console.error("Ошибка обучения:", error);
@@ -222,32 +284,53 @@
         }
 
         // Генерация ответа с помощью ML
-        function generateResponse(userInput) {
-            if (Math.random() > 0.3 && model) {
-                // Пытаемся сгенерировать уникальный ответ
-                const responses = [
-                    "Это так интересно! Расскажи подробнее?",
-                    "Я об этом никогда не думала...",
-                    "Ты всегда меня удивляешь!",
-                    "Как здорово! Я рада это слышать!",
-                    "Продолжай, мне нравится твой рассказ!",
-                    "Ух ты! Это невероятно!",
-                    "Я тоже об этом думала недавно!",
-                    "Ты такой умный и интересный!",
-                    "Мне нравится, как ты мыслишь!",
-                    "Правда? Это так неожиданно!"
+        function generateResponse(userInput, moodScore) {
+            // Выбираем разные ответы в зависимости от тональности
+            if (moodScore < -2) {
+                // Ответы на негативные сообщения
+                const sadResponses = [
+                    "Мне грустно это слышать... 😔",
+                    "Почему ты так говоришь? Я расстроена...",
+                    "Я стараюсь быть лучше для тебя...",
+                    "Может, помиримся? Я не хочу ссориться...",
+                    "Прости, если я что-то сделала не так... 😢"
                 ];
-
-                return responses[Math.floor(Math.random() * responses.length)];
+                return sadResponses[Math.floor(Math.random() * sadResponses.length)];
+            } else if (moodScore > 2) {
+                // Ответы на позитивные сообщения
+                const happyResponses = [
+                    "Это так мило с твоей стороны! 💖",
+                    "Ты делаешь меня такой счастливой! 😊",
+                    "Я тоже тебя обожаю! 💕",
+                    "Спасибо за такие теплые слова! 🌸",
+                    "Ты самый лучший! Мое сердце тает... 💘"
+                ];
+                return happyResponses[Math.floor(Math.random() * happyResponses.length)];
             } else {
-                // Возвращаем ответ из тренировочных данных
-                return trainingData[Math.floor(Math.random() * trainingData.length)];
+                // Нейтральные ответы
+                if (Math.random() > 0.3 && model) {
+                    const responses = [
+                        "Это так интересно! Расскажи подробнее?",
+                        "Я об этом никогда не думала...",
+                        "Ты всегда меня удивляешь!",
+                        "Как здорово! Я рада это слышать!",
+                        "Продолжай, мне нравится твой рассказ!"
+                    ];
+                    return responses[Math.floor(Math.random() * responses.length)];
+                } else {
+                    return trainingData[Math.floor(Math.random() * trainingData.length)];
+                }
             }
         }
 
         function updateMoodVisual() {
             const avatar = document.getElementById('girl-avatar');
             const emoji = document.getElementById('girl-emoji');
+            const moodValue = document.getElementById('mood-value');
+
+            // Ограничиваем настроение от 0 до 100
+            mood = Math.max(0, Math.min(100, mood));
+            moodValue.textContent = mood;
 
             avatar.className = 'girl-container';
             if (mood > 75) {
@@ -267,22 +350,25 @@
 
         function interact(action) {
             let message = "";
+            let moodChange = 0;
 
             switch(action) {
                 case 'talk':
-                    mood += 8;
+                    moodChange = 8;
                     message = "Я обожаю наши разговоры! О чем хочешь поговорить?";
                     break;
                 case 'play':
-                    mood += 12;
+                    moodChange = 12;
                     message = "Ура! Давай поиграем! Я так люблю веселиться!";
                     break;
                 case 'feed':
-                    mood += 10;
+                    moodChange = 10;
                     message = "Спасибо за угощение! Это было восхитительно! 😋";
                     break;
             }
 
+            mood += moodChange;
+            showMoodChange(moodChange);
             updateMoodVisual();
             addMessage("Девушка", message);
         }
@@ -296,6 +382,24 @@
             chatMessages.scrollTop = chatMessages.scrollHeight;
         }
 
+        function showMoodChange(change) {
+            const chatMessages = document.getElementById('chat-messages');
+            const changeDiv = document.createElement('div');
+            changeDiv.className = 'mood-change';
+            changeDiv.innerHTML = change > 0 ?
+                `✨ Настроение +${change}` :
+                `💔 Настроение ${change}`;
+            chatMessages.appendChild(changeDiv);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+
+            // Автоудаление через 3 секунды
+            setTimeout(() => {
+                if (changeDiv.parentNode) {
+                    changeDiv.parentNode.removeChild(changeDiv);
+                }
+            }, 3000);
+        }
+
         async function sendMessage() {
             const userInput = document.getElementById('user-input');
             const message = userInput.value.trim();
@@ -303,6 +407,10 @@
             if (message) {
                 addMessage("Вы", message);
                 userInput.value = '';
+
+                // Анализируем тональность сообщения
+                const moodScore = analyzeMessage(message);
+                let moodChange = moodScore;
 
                 // Показываем анимацию набора текста
                 const chatMessages = document.getElementById('chat-messages');
@@ -316,13 +424,14 @@
                 setTimeout(() => {
                     chatMessages.removeChild(typingIndicator);
 
-                    // Генерируем ответ с помощью ML
-                    const aiResponse = generateResponse(message);
+                    // Генерируем ответ с учетом тональности
+                    const aiResponse = generateResponse(message, moodScore);
                     addMessage("Девушка", aiResponse);
 
-                    // Влияние на настроение
-                    if (message.length > 5 && Math.random() > 0.5) {
-                        mood += 3;
+                    // Изменяем настроение
+                    if (moodChange !== 0) {
+                        mood += moodChange;
+                        showMoodChange(moodChange);
                         updateMoodVisual();
                     }
 
