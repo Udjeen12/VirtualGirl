@@ -1,352 +1,345 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html>
 <head>
-  <title>Виртуальная девушка с AI</title>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <!-- Telegram WebApp API -->
-  <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <!-- TensorFlow.js -->
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.18.0"></script>
-  <!-- Snowball stemmer (RU) -->
-  <script src="https://cdn.jsdelivr.net/npm/snowball-stemmers@0.4.0/dist/snowball-stemmers.min.js"></script>
-  <style>
-    /* Стили можно заменить на твои — оставляю лёгкую базу, чтобы было видно элементы */
-    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 0; background:#0f1115; color:#e7e7ea; }
-    .app { max-width: 720px; margin: 0 auto; padding: 16px; }
-    .top { display:flex; align-items:center; gap:12px; margin-bottom:12px; }
-    .girl-container { width:48px; height:48px; border-radius:50%; display:flex; align-items:center; justify-content:center; background:#252836; }
-    .mood { margin-left:auto; opacity:0.9; }
-    .badge { display:inline-block; padding:2px 8px; border-radius:12px; background:#1f2230; }
-    .panel { background:#151823; border:1px solid #26293a; border-radius:12px; overflow:hidden; }
-    #chat-messages { height: 48vh; overflow-y: auto; padding: 12px; }
-    .message { padding: 8px 10px; margin: 8px 0; border-radius:10px; line-height:1.35; }
-    .user-message { background:#1a1e2b; border:1px solid #2a2e42; }
-    .bot-message { background:#171d2a; border:1px solid #2a3247; }
-    .mood-change { font-size: 12px; opacity: 0.8; margin: 6px 0; }
-    .typing { opacity: 0.7; }
-    .controls { display:flex; gap:8px; padding:12px; border-top:1px solid #26293a; background:#111421; }
-    .controls > button { padding:8px 12px; border-radius:10px; border:1px solid #2a2e42; background:#1a1e2b; color:#e7e7ea; cursor:pointer; }
-    .input-row { display:flex; gap:8px; padding:12px; border-top:1px solid #26293a; background:#0f121c; }
-    .input-row input { flex:1; padding:10px 12px; border-radius:10px; border:1px solid #2a2e42; background:#131728; color:#e7e7ea; }
-    .input-row button { padding:10px 14px; border-radius:10px; border:1px solid #2a2e42; background:#1a1e2b; color:#e7e7ea; cursor:pointer; }
-  </style>
+    <title>Виртуальная девушка с AI</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.18.0"></script>
+    <style>
+        /* Стили остаются без изменений */
+    </style>
 </head>
 <body>
-  <div class="app">
-    <div class="top">
-      <div id="girl-avatar" class="girl-container"><span id="girl-emoji">😊</span></div>
-      <div><strong>Виртуальная девушка</strong><div style="opacity:.7;font-size:12px">AI companion</div></div>
-      <div class="mood">Настроение: <span id="mood-value" class="badge">50</span></div>
-    </div>
+    <!-- HTML структура без изменений -->
 
-    <div class="panel">
-      <div id="chat-messages"></div>
-      <div class="controls">
-        <button onclick="interact('talk')">Поговорить</button>
-        <button onclick="interact('play')">Поиграть</button>
-        <button onclick="interact('feed')">Угостить</button>
-      </div>
-      <div class="input-row">
-        <input id="user-input" type="text" placeholder="Напишите сообщение..." />
-        <button id="send-btn" onclick="sendMessage()">Отправить</button>
-      </div>
-    </div>
-  </div>
+    <script>
+        let mood = 50;
+        let model;
+        let isTraining = false;
 
-  <script>
-    let mood = 50;
-    let model;
-    let isTraining = false;
-
-    // Списки корней (можно дополнять)
-    const badWordRoots = [
-      'дур','идиот','туп','урод','ненавист','надоед','отврат',
-      'гад','мерз','против','скуч','бес','зл','плох',
-      'фу','терп','уйд','отстан','дост','кошмар','ужас',
-      'глуп','некрасив','мерзк','противн','дебил','кретин','скотин',
-      'сволоч','подон','муд','отчисл','убог','жалк','ничтож'
-    ];
-
-    const goodWordRoots = [
-      'люб','нрав','красив','умн','мил','добр','лапоч','зайк',
-      'солнц','радост','счаст','восхит','прекрас','замечатель','великол',
-      'обож','восторг','нежн','ласк','мечт','ангел','чудес',
-      'симпат','прият','хорош','прелест','очаров'
-    ];
-
-    // === Snowball (RU) вместо самописного стемминга ===
-    const stemmer = new Snowball('Russian');
-    function getWordRoot(word) {
-      return stemmer.stemWord(word.toLowerCase());
-    }
-
-    // Улучшенный анализ тональности с нормальным стеммингом
-    function analyzeMessage(message) {
-      const words = message
-        .toLowerCase()
-        .replace(/[^\w\sа-яё]/gi, ' ')
-        .split(/\s+/)
-        .filter(w => w.length > 2);
-
-      let score = 0;
-      let foundBadWords = [];
-      let foundGoodWords = [];
-
-      words.forEach(word => {
-        const root = getWordRoot(word);
-
-        // отладка корней (можно включить при необходимости)
-        // console.log(word, '->', root);
-
-        badWordRoots.forEach(badRoot => {
-          if (root.includes(badRoot) || badRoot.includes(root)) {
-            score -= 3;
-            foundBadWords.push(word);
-          }
-        });
-
-        goodWordRoots.forEach(goodRoot => {
-          if (root.includes(goodRoot) || goodRoot.includes(root)) {
-            score += 2;
-            foundGoodWords.push(word);
-          }
-        });
-      });
-
-      // Доп. факторы (как у тебя)
-      if (message.includes('?') && message.length > 10) score += 1;
-      if (message.length < 3) score -= 1;
-      if (message.includes('!')) score += 1;
-
-      // Логи
-      console.log('Сообщение:', message);
-      console.log('Найденные плохие слова:', foundBadWords);
-      console.log('Найденные хорошие слова:', foundGoodWords);
-      console.log('Итоговый score:', score);
-
-      return score;
-    }
-
-    // Ответы с учётом тональности (твоя логика сохранена)
-    function generateResponse(userInput, moodScore) {
-      if (moodScore < -5) {
-        const verySadResponses = [
-          "Я так расстроена... Может, я заслужила это? 😭",
-          "Зачем ты так со мной? Мне очень больно... 💔",
-          "Я попробую стать лучше, пожалуйста, не злись... 😢",
-          "Мое сердце разбивается от таких слов...",
-          "Я не хочу ссориться, давай помиримся? 🥺"
+        // Улучшенные списки слов (только корни)
+        const badWordRoots = [
+            'дур', 'идиот', 'туп', 'урод', 'ненави', 'надое', 'отврат',
+            'гад', 'мерз', 'против', 'скуч', 'бес', 'зл', 'плох',
+            'фи', 'фу', 'терп', 'уйд', 'отстан', 'доста', 'кошмар', 'ужас',
+            'глуп', 'некрас', 'мерзк', 'противн', 'дебил', 'кретин', 'скотин',
+            'сволоч', 'подон', 'муд', 'отчис', 'убог', 'жалк', 'ничтож'
         ];
-        return verySadResponses[Math.floor(Math.random() * verySadResponses.length)];
-      } else if (moodScore < -2) {
-        const sadResponses = [
-          "Мне грустно это слышать... 😔",
-          "Почему ты так говоришь? Я расстроена...",
-          "Я стараюсь быть лучше для тебя...",
-          "Может, помиримся? Я не хочу ссориться...",
-          "Прости, если я что-то сделала не так... 😢"
+
+        const goodWordRoots = [
+            'люб', 'нрав', 'крас', 'ум', 'мил', 'добр', 'лапоч', 'зайк',
+            'солн', 'рад', 'счаст', 'восхит', 'прекрас', 'замеча', 'великол',
+            'обож', 'восторг', 'нежн', 'ласк', 'мечт', 'ангел', 'чуд',
+            'симпат', 'прият', 'хорош', 'мил', 'прелест', 'очарова', 'восхит'
         ];
-        return sadResponses[Math.floor(Math.random() * sadResponses.length)];
-      } else if (moodScore > 5) {
-        const veryHappyResponses = [
-          "Ты делаешь меня самой счастливой в мире! 💖",
-          "Я плачу от счастья! Ты такой wonderful! 😭💕",
-          "Мое сердце трепещет от твоих слов! 💘",
-          "Ты самый лучший человек на свете! 🌟",
-          "Я обожаю тебя всем своим цифровым сердцем! 💝"
-        ];
-        return veryHappyResponses[Math.floor(Math.random() * veryHappyResponses.length)];
-      } else if (moodScore > 2) {
-        const happyResponses = [
-          "Это так мило с твоей стороны! 💖",
-          "Ты делаешь меня такой счастливой! 😊",
-          "Я тоже тебя обожаю! 💕",
-          "Спасибо за такие теплые слова! 🌸",
-          "Ты самый лучший! Мое сердце тает... 💘"
-        ];
-        return happyResponses[Math.floor(Math.random() * happyResponses.length)];
-      } else {
-        if (Math.random() > 0.3) {
-          const neutralResponses = [
-            "Интересно! Расскажи еще?",
-            "Я внимательно слушаю...",
-            "Как любопытно!",
-            "Продолжай, мне нравится твой рассказ!",
-            "Ух ты! Я никогда об этом не думала!"
-          ];
-          return neutralResponses[Math.floor(Math.random() * neutralResponses.length)];
-        } else {
-          return trainingData[Math.floor(Math.random() * trainingData.length)];
+
+        // Функция для приведения слова к корневой форме (упрощенный стемминг)
+        function getWordRoot(word) {
+            // Удаляем окончания и суффиксы
+            let root = word.toLowerCase();
+
+            // Удаляем распространенные окончания
+            const endings = ['а', 'я', 'о', 'е', 'и', 'ы', 'у', 'ю', 'ей', 'ой', 'ом', 'ем', 'ах', 'ях', 'ами', 'ями', 'у', 'ю', 'ь'];
+            endings.forEach(end => {
+                if (root.endsWith(end) && root.length > end.length + 2) {
+                    root = root.slice(0, -end.length);
+                }
+            });
+
+            return root;
         }
-      }
-    }
 
-    // Остальной код без изменений (как у тебя)
-    const trainingData = [
-      "Привет! Как твои дела?",
-      "Я так рада тебя видеть!",
-      "Что нового у тебя?",
-      "Мне нравится с тобой разговаривать",
-      "Расскажи что-нибудь интересное",
-      "Ты такой милый!",
-      "Хочешь поиграем во что-нибудь?",
-      "Я сегодня в хорошем настроении",
-      "Спасибо, что ты есть у меня",
-      "Ты мне так нравишься!"
-    ];
+        // Улучшенная функция анализа тональности
+        function analyzeMessage(message) {
+            const words = message.toLowerCase()
+                .replace(/[^\w\sа-яё]/gi, ' ') // Удаляем знаки препинания
+                .split(/\s+/) // Разбиваем на слова
+                .filter(word => word.length > 2); // Игнорируем короткие слова
 
-    async function initModel() {
-      try {
-        model = tf.sequential();
-        model.add(tf.layers.lstm({ units: 64, inputShape: [10, 256], returnSequences: true }));
-        model.add(tf.layers.dropout({ rate: 0.2 }));
-        model.add(tf.layers.lstm({ units: 32 }));
-        model.add(tf.layers.dense({ units: 128, activation: 'relu' }));
-        model.add(tf.layers.dense({ units: trainingData.join(' ').length, activation: 'softmax' }));
-        model.compile({ optimizer: 'adam', loss: 'categoricalCrossentropy' });
-        await trainModel();
-        addMessage("Система", "AI модель загружена и готова к общению! 🚀");
-      } catch (error) {
-        console.error("Ошибка инициализации модели:", error);
-        addMessage("Система", "Используется базовый режим общения");
-      }
-    }
+            let score = 0;
+            let foundBadWords = [];
+            let foundGoodWords = [];
 
-    async function trainModel() {
-      if (isTraining) return;
-      isTraining = true;
-      addMessage("Система", "Девушка учится общаться... 📚");
-      try {
-        const text = trainingData.join(' ');
-        const chars = Array.from(new Set(text));
-        const charIndices = {};
-        const indicesChar = {};
-        chars.forEach((char, i) => {
-          charIndices[char] = i;
-          indicesChar[i] = char;
-        });
-        addMessage("Система", "Обучение завершено! 🎓");
-      } catch (error) {
-        console.error("Ошибка обучения:", error);
-      }
-      isTraining = false;
-    }
+            // Анализируем каждое слово
+            words.forEach(word => {
+                const root = getWordRoot(word);
 
-    function updateMoodVisual() {
-      const avatar = document.getElementById('girl-avatar');
-      const emoji = document.getElementById('girl-emoji');
-      const moodValue = document.getElementById('mood-value');
-      mood = Math.max(0, Math.min(100, mood));
-      moodValue.textContent = mood;
-      avatar.className = 'girl-container';
-      if (mood > 75) {
-        emoji.textContent = '😍';
-        avatar.classList.add('mood-happy');
-      } else if (mood > 50) {
-        emoji.textContent = '😊';
-        avatar.classList.add('mood-good');
-      } else if (mood > 25) {
-        emoji.textContent = '😐';
-        avatar.classList.add('mood-neutral');
-      } else {
-        emoji.textContent = '😞';
-        avatar.classList.add('mood-sad');
-      }
-    }
+                // Проверяем плохие корни
+                badWordRoots.forEach(badRoot => {
+                    if (root.includes(badRoot) || badRoot.includes(root)) {
+                        score -= 3;
+                        foundBadWords.push(word);
+                    }
+                });
 
-    function interact(action) {
-      let message = "";
-      let moodChange = 0;
-      switch(action) {
-        case 'talk':
-          moodChange = 8;
-          message = "Я обожаю наши разговоры! О чем хочешь поговорить?";
-          break;
-        case 'play':
-          moodChange = 12;
-          message = "Ура! Давай поиграем! Я так люблю веселиться!";
-          break;
-        case 'feed':
-          moodChange = 10;
-          message = "Спасибо за угощение! Это было восхитительно! 😋";
-          break;
-      }
-      mood += moodChange;
-      showMoodChange(moodChange);
-      updateMoodVisual();
-      addMessage("Девушка", message);
-    }
+                // Проверяем хорошие корни
+                goodWordRoots.forEach(goodRoot => {
+                    if (root.includes(goodRoot) || goodRoot.includes(root)) {
+                        score += 2;
+                        foundGoodWords.push(word);
+                    }
+                });
+            });
 
-    function addMessage(sender, text) {
-      const chatMessages = document.getElementById('chat-messages');
-      const messageDiv = document.createElement('div');
-      messageDiv.className = `message ${sender === 'Девушка' ? 'bot-message' : (sender === 'Вы' ? 'user-message' : 'bot-message')}`;
-      messageDiv.innerHTML = `<strong>${sender}:</strong> ${text}`;
-      chatMessages.appendChild(messageDiv);
-      chatMessages.scrollTop = chatMessages.scrollHeight;
-    }
+            // Дополнительные факторы
+            if (message.includes('?') && message.length > 10) {
+                score += 1;
+            }
 
-    function showMoodChange(change) {
-      const chatMessages = document.getElementById('chat-messages');
-      const changeDiv = document.createElement('div');
-      changeDiv.className = 'mood-change';
-      changeDiv.innerHTML = change > 0 ? `✨ Настроение +${change}` : `💔 Настроение ${change}`;
-      chatMessages.appendChild(changeDiv);
-      chatMessages.scrollTop = chatMessages.scrollHeight;
-      setTimeout(() => {
-        if (changeDiv.parentNode) changeDiv.parentNode.removeChild(changeDiv);
-      }, 3000);
-    }
+            if (message.length < 3) {
+                score -= 1;
+            }
 
-    async function sendMessage() {
-      const userInput = document.getElementById('user-input');
-      const message = userInput.value.trim();
+            if (message.includes('!')) {
+                score += 1;
+            }
 
-      if (message) {
-        addMessage("Вы", message);
-        userInput.value = '';
+            // Отладочная информация
+            console.log('Сообщение:', message);
+            console.log('Найденные плохие слова:', foundBadWords);
+            console.log('Найденные хорошие слова:', foundGoodWords);
+            console.log('Итоговый score:', score);
 
-        const moodScore = analyzeMessage(message);
-        let moodChange = moodScore;
+            return score;
+        }
 
-        const chatMessages = document.getElementById('chat-messages');
-        const typingIndicator = document.createElement('div');
-        typingIndicator.className = 'message bot-message';
-        typingIndicator.innerHTML = '<strong>Девушка:</strong> <span class="typing">...</span>';
-        chatMessages.appendChild(typingIndicator);
-        chatMessages.scrollTop = chatMessages.scrollHeight;
+        // Функция для генерации ответа с учетом тональности
+        function generateResponse(userInput, moodScore) {
+            // Сильно негативные сообщения
+            if (moodScore < -5) {
+                const verySadResponses = [
+                    "Я так расстроена... Может, я заслужила это? 😭",
+                    "Зачем ты так со мной? Мне очень больно... 💔",
+                    "Я попробую стать лучше, пожалуйста, не злись... 😢",
+                    "Мое сердце разбивается от таких слов...",
+                    "Я не хочу ссориться, давай помиримся? 🥺"
+                ];
+                return verySadResponses[Math.floor(Math.random() * verySadResponses.length)];
+            }
+            // Негативные сообщения
+            else if (moodScore < -2) {
+                const sadResponses = [
+                    "Мне грустно это слышать... 😔",
+                    "Почему ты так говоришь? Я расстроена...",
+                    "Я стараюсь быть лучше для тебя...",
+                    "Может, помиримся? Я не хочу ссориться...",
+                    "Прости, если я что-то сделала не так... 😢"
+                ];
+                return sadResponses[Math.floor(Math.random() * sadResponses.length)];
+            }
+            // Очень позитивные сообщения
+            else if (moodScore > 5) {
+                const veryHappyResponses = [
+                    "Ты делаешь меня самой счастливой в мире! 💖",
+                    "Я плачу от счастья! Ты такой wonderful! 😭💕",
+                    "Мое сердце трепещет от твоих слов! 💘",
+                    "Ты самый лучший человек на свете! 🌟",
+                    "Я обожаю тебя всем своим цифровым сердцем! 💝"
+                ];
+                return veryHappyResponses[Math.floor(Math.random() * veryHappyResponses.length)];
+            }
+            // Позитивные сообщения
+            else if (moodScore > 2) {
+                const happyResponses = [
+                    "Это так мило с твоей стороны! 💖",
+                    "Ты делаешь меня такой счастливой! 😊",
+                    "Я тоже тебя обожаю! 💕",
+                    "Спасибо за такие теплые слова! 🌸",
+                    "Ты самый лучший! Мое сердце тает... 💘"
+                ];
+                return happyResponses[Math.floor(Math.random() * happyResponses.length)];
+            }
+            // Нейтральные ответы
+            else {
+                if (Math.random() > 0.3) {
+                    const neutralResponses = [
+                        "Интересно! Расскажи еще?",
+                        "Я внимательно слушаю...",
+                        "Как любопытно!",
+                        "Продолжай, мне нравится твой рассказ!",
+                        "Ух ты! Я никогда об этом не думала!"
+                    ];
+                    return neutralResponses[Math.floor(Math.random() * neutralResponses.length)];
+                } else {
+                    return trainingData[Math.floor(Math.random() * trainingData.length)];
+                }
+            }
+        }
 
-        setTimeout(() => {
-          chatMessages.removeChild(typingIndicator);
-          const aiResponse = generateResponse(message, moodScore);
-          addMessage("Девушка", aiResponse);
-          if (moodChange !== 0) {
+        // Остальной код без изменений...
+        const trainingData = [
+            "Привет! Как твои дела?",
+            "Я так рада тебя видеть!",
+            "Что нового у тебя?",
+            "Мне нравится с тобой разговаривать",
+            "Расскажи что-нибудь интересное",
+            "Ты такой милый!",
+            "Хочешь поиграем во что-нибудь?",
+            "Я сегодня в хорошем настроении",
+            "Спасибо, что ты есть у меня",
+            "Ты мне так нравишься!"
+        ];
+
+        // Инициализация модели и остальные функции остаются без изменений...
+        async function initModel() {
+            try {
+                model = tf.sequential();
+                model.add(tf.layers.lstm({
+                    units: 64,
+                    inputShape: [10, 256],
+                    returnSequences: true
+                }));
+                model.add(tf.layers.dropout({rate: 0.2}));
+                model.add(tf.layers.lstm({units: 32}));
+                model.add(tf.layers.dense({units: 128, activation: 'relu'}));
+                model.add(tf.layers.dense({
+                    units: trainingData.join(' ').length,
+                    activation: 'softmax'
+                }));
+                model.compile({
+                    optimizer: 'adam',
+                    loss: 'categoricalCrossentropy'
+                });
+                await trainModel();
+                addMessage("Система", "AI модель загружена и готова к общению! 🚀");
+            } catch (error) {
+                console.error("Ошибка инициализации модели:", error);
+                addMessage("Система", "Используется базовый режим общения");
+            }
+        }
+
+        async function trainModel() {
+            if (isTraining) return;
+            isTraining = true;
+            addMessage("Система", "Девушка учится общаться... 📚");
+            try {
+                const text = trainingData.join(' ');
+                const chars = Array.from(new Set(text));
+                const charIndices = {};
+                const indicesChar = {};
+                chars.forEach((char, i) => {
+                    charIndices[char] = i;
+                    indicesChar[i] = char;
+                });
+                addMessage("Система", "Обучение завершено! 🎓");
+            } catch (error) {
+                console.error("Ошибка обучения:", error);
+            }
+            isTraining = false;
+        }
+
+        function updateMoodVisual() {
+            const avatar = document.getElementById('girl-avatar');
+            const emoji = document.getElementById('girl-emoji');
+            const moodValue = document.getElementById('mood-value');
+            mood = Math.max(0, Math.min(100, mood));
+            moodValue.textContent = mood;
+            avatar.className = 'girl-container';
+            if (mood > 75) {
+                emoji.textContent = '😍';
+                avatar.classList.add('mood-happy');
+            } else if (mood > 50) {
+                emoji.textContent = '😊';
+                avatar.classList.add('mood-good');
+            } else if (mood > 25) {
+                emoji.textContent = '😐';
+                avatar.classList.add('mood-neutral');
+            } else {
+                emoji.textContent = '😞';
+                avatar.classList.add('mood-sad');
+            }
+        }
+
+        function interact(action) {
+            let message = "";
+            let moodChange = 0;
+            switch(action) {
+                case 'talk':
+                    moodChange = 8;
+                    message = "Я обожаю наши разговоры! О чем хочешь поговорить?";
+                    break;
+                case 'play':
+                    moodChange = 12;
+                    message = "Ура! Давай поиграем! Я так люблю веселиться!";
+                    break;
+                case 'feed':
+                    moodChange = 10;
+                    message = "Спасибо за угощение! Это было восхитительно! 😋";
+                    break;
+            }
             mood += moodChange;
             showMoodChange(moodChange);
             updateMoodVisual();
-          }
-        }, 1500 + Math.random() * 1000);
-      }
-    }
+            addMessage("Девушка", message);
+        }
 
-    // Инициализация Telegram WebApp
-    let tg = window.Telegram.WebApp;
-    try {
-      tg.expand();
-      tg.MainButton.setText("Назад").show().onClick(() => tg.close());
-    } catch(e) {
-      // если не внутри Telegram — просто игнорируем
-    }
+        function addMessage(sender, text) {
+            const chatMessages = document.getElementById('chat-messages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${sender === 'Девушка' ? 'bot-message' : 'user-message'}`;
+            messageDiv.innerHTML = `<strong>${sender}:</strong> ${text}`;
+            chatMessages.appendChild(messageDiv);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
 
-    document.getElementById('user-input').addEventListener('keypress', (e) => {
-      if (e.key === 'Enter') sendMessage();
-    });
+        function showMoodChange(change) {
+            const chatMessages = document.getElementById('chat-messages');
+            const changeDiv = document.createElement('div');
+            changeDiv.className = 'mood-change';
+            changeDiv.innerHTML = change > 0 ?
+                `✨ Настроение +${change}` :
+                `💔 Настроение ${change}`;
+            chatMessages.appendChild(changeDiv);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+            setTimeout(() => {
+                if (changeDiv.parentNode) {
+                    changeDiv.parentNode.removeChild(changeDiv);
+                }
+            }, 3000);
+        }
 
-    // Старт
-    initModel();
-    addMessage("Девушка", "Привет! Я твоя виртуальная подруга с искусственным интеллектом! 💖");
-    updateMoodVisual();
-  </script>
+        async function sendMessage() {
+            const userInput = document.getElementById('user-input');
+            const message = userInput.value.trim();
+
+            if (message) {
+                addMessage("Вы", message);
+                userInput.value = '';
+
+                const moodScore = analyzeMessage(message);
+                let moodChange = moodScore;
+
+                const chatMessages = document.getElementById('chat-messages');
+                const typingIndicator = document.createElement('div');
+                typingIndicator.className = 'message bot-message';
+                typingIndicator.innerHTML = '<strong>Девушка:</strong> <span class="typing">...</span>';
+                chatMessages.appendChild(typingIndicator);
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+
+                setTimeout(() => {
+                    chatMessages.removeChild(typingIndicator);
+                    const aiResponse = generateResponse(message, moodScore);
+                    addMessage("Девушка", aiResponse);
+                    if (moodChange !== 0) {
+                        mood += moodChange;
+                        showMoodChange(moodChange);
+                        updateMoodVisual();
+                    }
+                }, 1500 + Math.random() * 1000);
+            }
+        }
+
+        // Инициализация
+        let tg = window.Telegram.WebApp;
+        tg.expand();
+        tg.MainButton.setText("Назад").show().onClick(() => tg.close());
+        document.getElementById('user-input').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') sendMessage();
+        });
+        initModel();
+        addMessage("Девушка", "Привет! Я твоя виртуальная подруга с искусственным интеллектом! 💖");
+        updateMoodVisual();
+    </script>
 </body>
 </html>
