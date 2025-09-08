@@ -137,7 +137,7 @@
     <h1 style="color: #2d3436;">🌸 Виртуальная девушка с AI 🌸</h1>
 
     <div class="girl-container" id="girl-avatar">
-        <img id="girl-image" src="girl_happy.png" alt="Девушка" class="girl-image" />
+        <img id="girl-image" src="https://raw.githubusercontent.com/Udjeen12/VirtualGirl/master/girl_happy.png" alt="Девушка" class="girl-image" />
     </div>
 
     <div id="mood-indicator">
@@ -159,14 +159,13 @@
         </div>
     </div>
 
-    <!-- Предзагрузка изображений -->
-    <!-- Предзагрузка изображений -->
+    <!-- Предзагрузка изображений через GitHub RAW -->
     <div style="display: none;">
-        <img src="file:///D:/python/VirtualGirl/girl_happy.png" alt="Preload">
-        <img src="file:///D:/python/VirtualGirl/girl_good.png" alt="Preload">
-        <img src="file:///D:/python/VirtualGirl/girl_neutral.png" alt="Preload">
-        <img src="file:///D:/python/VirtualGirl/girl_sad.png" alt="Preload">
-        <img src="file:///D:/python/VirtualGirl/girl_very_sad.png" alt="Preload">
+        <img src="https://raw.githubusercontent.com/Udjeen12/VirtualGirl/master/girl_happy.png" alt="Preload">
+        <img src="https://raw.githubusercontent.com/Udjeen12/VirtualGirl/master/girl_good.png" alt="Preload">
+        <img src="https://raw.githubusercontent.com/Udjeen12/VirtualGirl/master/girl_neutral.png" alt="Preload">
+        <img src="https://raw.githubusercontent.com/Udjeen12/VirtualGirl/master/girl_sad.png" alt="Preload">
+        <img src="https://raw.githubusercontent.com/Udjeen12/VirtualGirl/master/girl_very_sad.png" alt="Preload">
     </div>
 
     <script>
@@ -197,7 +196,7 @@
             'фи', 'фу', 'терп', 'уйд', 'отстан', 'доста', 'кошмар', 'ужас',
             'глуп', 'некрас', 'мерзк', 'противн', 'дебил', 'кретин', 'скотин',
             'сволоч', 'подон', 'муд', 'отчис', 'убог', 'жалк', 'ничтож',
-            'сук', 'бля', 'ху', 'пизд', 'еб'
+            'сук', 'бля', 'ху', 'pizd', 'eb'
         ];
 
         const goodWordRoots = [
@@ -323,21 +322,21 @@
 
             avatar.className = 'girl-container';
 
-            // Устанавливаем соответствующее изображение в зависимости от настроения
+            // Устанавливаем соответствующее изображение из GitHub
             if (mood > 75) {
-                girlImage.src = "file:///D:/python/VirtualGirl/girl_happy.png";
+                girlImage.src = "https://raw.githubusercontent.com/Udjeen12/VirtualGirl/master/girl_happy.png";
                 avatar.classList.add('mood-happy');
             } else if (mood > 50) {
-                girlImage.src = "file:///D:/python/VirtualGirl/girl_good.png";
+                girlImage.src = "https://raw.githubusercontent.com/Udjeen12/VirtualGirl/master/girl_good.png";
                 avatar.classList.add('mood-good');
             } else if (mood > 25) {
-                girlImage.src = "file:///D:/python/VirtualGirl/girl_neutral.png";
+                girlImage.src = "https://raw.githubusercontent.com/Udjeen12/VirtualGirl/master/girl_neutral.png";
                 avatar.classList.add('mood-neutral');
             } else if (mood > 10) {
-                girlImage.src = "file:///D:/python/VirtualGirl/girl_sad.png";
+                girlImage.src = "https://raw.githubusercontent.com/Udjeen12/VirtualGirl/master/girl_sad.png";
                 avatar.classList.add('mood-sad');
             } else {
-                girlImage.src = "file:///D:/python/VirtualGirl/girl_very_sad.png";
+                girlImage.src = "https://raw.githubusercontent.com/Udjeen12/VirtualGirl/master/girl_very_sad.png";
                 avatar.classList.add('mood-sad');
             }
         }
