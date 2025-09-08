@@ -1,15 +1,11 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Виртуальная девушка с 3D аватаром</title>
+    <title>Виртуальная девушка с анимированным аватаром</title>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/snowball-stemmers@1.0.2/dist/snowball.min.js"></script>
-    <!-- Подключаем Three.js для 3D графики -->
-    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/controls/OrbitControls.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/loaders/GLTFLoader.js"></script>
     <style>
         body {
             font-family: 'Arial', sans-serif;
@@ -31,6 +27,13 @@
             overflow: hidden;
             box-shadow: 0 15px 35px rgba(0, 0, 0, 0.2);
             background: linear-gradient(45deg, #a18cd1 0%, #fbc2eb 100%);
+        }
+
+        #avatar-image {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transition: all 0.3s ease;
         }
 
         #mood-indicator {
@@ -186,6 +189,19 @@
             100% { transform: translateY(-100px) rotate(20deg); opacity: 0; }
         }
 
+        @keyframes avatarPulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.02); }
+            100% { transform: scale(1); }
+        }
+
+        @keyframes avatarTilt {
+            0% { transform: rotate(0deg); }
+            33% { transform: rotate(2deg); }
+            66% { transform: rotate(-2deg); }
+            100% { transform: rotate(0deg); }
+        }
+
         h1 {
             margin-bottom: 5px;
             background: linear-gradient(45deg, #e84393, #6c5ce7);
@@ -196,11 +212,11 @@
     </style>
 </head>
 <body>
-    <h1>🌸 Виртуальная девушка с 3D аватаром 🌸</h1>
+    <h1>🌸 Виртуальная девушка с анимированным аватаром 🌸</h1>
 
     <div id="avatar-container">
         <div class="hearts-container" id="hearts-container"></div>
-        <!-- 3D сцена будет отрисовываться здесь -->
+        <img id="avatar-image" src="https://i.imgur.com/5R5hW7B.png" alt="Аватар девушки">
     </div>
 
     <div id="mood-indicator">
@@ -228,352 +244,14 @@
         let mood = 50;
         let stemmer = null;
         let currentEmotion = 'happy';
+        let avatarImages = {
+            'happy': 'https://i.imgur.com/5R5hW7B.png',
+            'sad': 'https://i.imgur.com/vV0wC2x.png',
+            'angry': 'https://i.imgur.com/Ms3tVqP.png',
+            'love': 'https://i.imgur.com/u3qizZf.png',
+            'neutral': 'https://i.imgur.com/5R5hW7B.png'
+        };
 
-        // Инициализация Three.js сцены
-        let scene, camera, renderer, avatar, mixer, clock;
-        let animations = {};
-
-        function init3DScene() {
-            // Создаем сцену
-            scene = new THREE.Scene();
-            scene.background = new THREE.Color(0xf9f7f7);
-
-            // Создаем камеру
-            camera = new THREE.PerspectiveCamera(45, 300 / 300, 0.1, 1000);
-            camera.position.set(0, 0, 8);
-
-            // Создаем рендерер
-            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-            renderer.setSize(300, 300);
-            renderer.setPixelRatio(window.devicePixelRatio);
-            document.getElementById('avatar-container').appendChild(renderer.domElement);
-
-            // Добавляем освещение
-            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
-            scene.add(ambientLight);
-
-            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-            directionalLight.position.set(3, 5, 5);
-            scene.add(directionalLight);
-
-            const backLight = new THREE.DirectionalLight(0xffffff, 0.4);
-            backLight.position.set(-5, -5, -5);
-            scene.add(backLight);
-
-            // Создаем улучшенную 3D-модель девушки
-            createDetailedAvatar();
-
-            // Инициализируем часы для анимации
-            clock = new THREE.Clock();
-
-            // Запускаем анимацию
-            animate();
-        }
-
-        function createDetailedAvatar() {
-            // Создаем группу для аватара
-            avatar = new THREE.Group();
-
-            // Голова (более овальная форма)
-            const headGeometry = new THREE.SphereGeometry(0.9, 32, 32, 0, Math.PI * 2, 0, Math.PI * 0.6);
-            const headMaterial = new THREE.MeshPhongMaterial({
-                color: 0xffd6cc,
-                shininess: 30
-            });
-            const head = new THREE.Mesh(headGeometry, headMaterial);
-            head.position.y = 0.5;
-            avatar.add(head);
-
-            // Волосы (более сложная форма)
-            const hairGeometry = new THREE.SphereGeometry(1.0, 32, 32, 0, Math.PI * 2, 0, Math.PI * 0.5);
-            const hairMaterial = new THREE.MeshPhongMaterial({
-                color: 0x4a2b17,
-                shininess: 10
-            });
-            const hair = new THREE.Mesh(hairGeometry, hairMaterial);
-            hair.position.y = 0.6;
-            hair.position.z = 0.1;
-            avatar.add(hair);
-
-            // Челка
-            const fringeGeometry = new THREE.CylinderGeometry(0.8, 1.0, 0.3, 32);
-            const fringe = new THREE.Mesh(fringeGeometry, hairMaterial);
-            fringe.position.y = 1.1;
-            fringe.position.z = 0.6;
-            fringe.rotation.x = Math.PI / 2;
-            avatar.add(fringe);
-
-            // Тело (платье)
-            const bodyGeometry = new THREE.CylinderGeometry(0.7, 0.9, 1.5, 32);
-            const bodyMaterial = new THREE.MeshPhongMaterial({
-                color: 0xe84393,
-                shininess: 40
-            });
-            const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
-            body.position.y = -0.9;
-            avatar.add(body);
-
-            // Глаза
-            const eyeGeometry = new THREE.SphereGeometry(0.12, 16, 16);
-            const eyeMaterial = new THREE.MeshPhongMaterial({ color: 0x0000ff });
-
-            const leftEye = new THREE.Mesh(eyeGeometry, eyeMaterial);
-            leftEye.position.set(-0.3, 0.7, 0.8);
-            avatar.add(leftEye);
-
-            const rightEye = new THREE.Mesh(eyeGeometry, eyeMaterial);
-            rightEye.position.set(0.3, 0.7, 0.8);
-            avatar.add(rightEye);
-
-            // Зрачки
-            const pupilGeometry = new THREE.SphereGeometry(0.06, 16, 16);
-            const pupilMaterial = new THREE.MeshPhongMaterial({ color: 0x000000 });
-
-            const leftPupil = new THREE.Mesh(pupilGeometry, pupilMaterial);
-            leftPupil.position.set(0, 0, 0.1);
-            leftEye.add(leftPupil);
-
-            const rightPupil = new THREE.Mesh(pupilGeometry, pupilMaterial);
-            rightPupil.position.set(0, 0, 0.1);
-            rightEye.add(rightPupil);
-
-            // Ресницы
-            const lashGeometry = new THREE.CylinderGeometry(0.01, 0.01, 0.1, 8);
-            const lashMaterial = new THREE.MeshPhongMaterial({ color: 0x000000 });
-
-            for (let i = 0; i < 5; i++) {
-                const lash = new THREE.Mesh(lashGeometry, lashMaterial);
-                lash.position.set(-0.35 + i * 0.025, 0.65, 0.82);
-                lash.rotation.z = -Math.PI / 4;
-                avatar.add(lash);
-
-                const rLash = new THREE.Mesh(lashGeometry, lashMaterial);
-                rLash.position.set(0.35 - i * 0.025, 0.65, 0.82);
-                rLash.rotation.z = Math.PI / 4;
-                avatar.add(rLash);
-            }
-
-            // Рот (изначально улыбка)
-            const mouthGeometry = new THREE.TorusGeometry(0.15, 0.05, 16, 32, Math.PI);
-            const mouthMaterial = new THREE.MeshPhongMaterial({ color: 0xff0066 });
-            const mouth = new THREE.Mesh(mouthGeometry, mouthMaterial);
-            mouth.position.set(0, 0.3, 0.8);
-            mouth.rotation.x = Math.PI / 2;
-            avatar.add(mouth);
-
-            // Брови
-            const browGeometry = new THREE.CylinderGeometry(0.02, 0.02, 0.3, 8);
-            const browMaterial = new THREE.MeshPhongMaterial({ color: 0x4a2b17 });
-
-            const leftBrow = new THREE.Mesh(browGeometry, browMaterial);
-            leftBrow.position.set(-0.3, 0.9, 0.8);
-            leftBrow.rotation.z = -Math.PI / 10;
-            avatar.add(leftBrow);
-
-            const rightBrow = new THREE.Mesh(browGeometry, browMaterial);
-            rightBrow.position.set(0.3, 0.9, 0.8);
-            rightBrow.rotation.z = Math.PI / 10;
-            avatar.add(rightBrow);
-
-            // Руки
-            const armGeometry = new THREE.CylinderGeometry(0.1, 0.1, 0.8, 16);
-            const armMaterial = new THREE.MeshPhongMaterial({ color: 0xffd6cc });
-
-            const leftArm = new THREE.Mesh(armGeometry, armMaterial);
-            leftArm.position.set(-0.8, -0.5, 0);
-            leftArm.rotation.z = Math.PI / 4;
-            avatar.add(leftArm);
-
-            const rightArm = new THREE.Mesh(armGeometry, armMaterial);
-            rightArm.position.set(0.8, -0.5, 0);
-            rightArm.rotation.z = -Math.PI / 4;
-            avatar.add(rightArm);
-
-            // Сохраняем ссылки на части лица для анимации
-            avatar.userData = {
-                mouth: mouth,
-                eyes: [leftEye, rightEye],
-                pupils: [leftPupil, rightPupil],
-                brows: [leftBrow, rightBrow],
-                arms: [leftArm, rightArm],
-                head: head,
-                emotion: 'happy',
-                targetRotation: 0
-            };
-
-            scene.add(avatar);
-
-            // Создаем простую анимацию моргания
-            setInterval(() => {
-                if (avatar.userData && Math.random() > 0.7) {
-                    blinkEyes();
-                }
-            }, 3000);
-        }
-
-        function blinkEyes() {
-            if (!avatar.userData) return;
-
-            const { eyes } = avatar.userData;
-
-            // Быстрое моргание
-            eyes.forEach(eye => {
-                const originalScale = eye.scale.y;
-                eye.scale.set(1, 0.1, 1);
-
-                setTimeout(() => {
-                    eye.scale.set(1, originalScale, 1);
-                }, 100);
-            });
-        }
-
-        function animate() {
-            requestAnimationFrame(animate);
-
-            const delta = clock.getDelta();
-
-            if (avatar) {
-                // Плавное покачивание головой
-                avatar.rotation.y = Math.sin(Date.now() * 0.001) * 0.1;
-
-                // Легкое дыхание - небольшое изменение масштаба
-                avatar.scale.set(
-                    1 + Math.sin(Date.now() * 0.002) * 0.01,
-                    1 + Math.cos(Date.now() * 0.002) * 0.01,
-                    1
-                );
-
-                // Анимация в зависимости от эмоции
-                animateEmotion(delta);
-            }
-
-            renderer.render(scene, camera);
-        }
-
-        function animateEmotion(delta) {
-            if (!avatar.userData) return;
-
-            const { mouth, eyes, pupils, brows, arms, emotion } = avatar.userData;
-
-            switch(emotion) {
-                case 'happy':
-                    // Улыбка
-                    mouth.scale.set(1.2, 1.2, 1.2);
-                    mouth.rotation.z = 0;
-                    // Слегка приподнятые брови
-                    brows.forEach(brow => brow.rotation.z = (brow === brows[0] ? -Math.PI/8 : Math.PI/8));
-                    // Руки в нормальном положении
-                    arms[0].rotation.z = Math.PI/4;
-                    arms[1].rotation.z = -Math.PI/4;
-                    break;
-
-                case 'sad':
-                    // Грустный рот
-                    mouth.scale.set(0.8, 0.8, 0.8);
-                    mouth.rotation.z = Math.PI;
-                    // Опущенные брови
-                    brows.forEach(brow => brow.rotation.z = (brow === brows[0] ? -Math.PI/12 : Math.PI/12));
-                    // Опущенные руки
-                    arms[0].rotation.z = Math.PI/6;
-                    arms[1].rotation.z = -Math.PI/6;
-                    break;
-
-                case 'angry':
-                    // Сердитый рот
-                    mouth.scale.set(0.7, 0.7, 0.7);
-                    mouth.rotation.z = 0;
-                    // Сведенные брови
-                    brows.forEach(brow => brow.rotation.z = (brow === brows[0] ? -Math.PI/5 : Math.PI/5));
-                    // Руки скрещены
-                    arms[0].rotation.z = Math.PI/2;
-                    arms[1].rotation.z = -Math.PI/2;
-                    break;
-
-                case 'love':
-                    // Радостный рот
-                    mouth.scale.set(1.3, 1.3, 1.3);
-                    mouth.rotation.z = 0;
-                    // Слегка приподнятые брови
-                    brows.forEach(brow => brow.rotation.z = (brow === brows[0] ? -Math.PI/9 : Math.PI/9));
-                    // Руки прижаты к груди
-                    arms[0].rotation.z = Math.PI/3;
-                    arms[1].rotation.z = -Math.PI/3;
-
-                    // Случайные сердечки
-                    if (Math.random() > 0.9) {
-                        createHeart();
-                    }
-                    break;
-            }
-
-            // Движение зрачков
-            pupils.forEach(pupil => {
-                pupil.position.x = Math.sin(Date.now() * 0.001) * 0.03;
-                pupil.position.y = Math.cos(Date.now() * 0.001) * 0.02;
-            });
-        }
-
-        function createHeart() {
-            const heart = document.createElement('div');
-            heart.className = 'heart';
-            heart.style.left = Math.random() * 250 + 'px';
-            heart.style.top = '280px';
-            heart.style.opacity = '0';
-            heart.style.transform = 'scale(0)';
-
-            document.getElementById('hearts-container').appendChild(heart);
-
-            // Анимация появления и движения
-            setTimeout(() => {
-                heart.style.transition = 'all 1s ease-out';
-                heart.style.opacity = '1';
-                heart.style.transform = 'scale(1)';
-
-                setTimeout(() => {
-                    heart.style.opacity = '0';
-                    heart.style.transform = 'translateY(-100px) scale(0.5)';
-
-                    setTimeout(() => {
-                        heart.remove();
-                    }, 1000);
-                }, 500);
-            }, 10);
-        }
-
-        function setEmotion(emotion) {
-            currentEmotion = emotion;
-            if (avatar.userData) {
-                avatar.userData.emotion = emotion;
-            }
-
-            // Обновляем индикатор эмоции
-            const emotionElement = document.getElementById('current-emotion');
-            emotionElement.className = 'emotion-badge ' + emotion;
-
-            switch(emotion) {
-                case 'happy':
-                    emotionElement.innerHTML = '😊 Радость';
-                    break;
-                case 'sad':
-                    emotionElement.innerHTML = '😢 Грусть';
-                    break;
-                case 'angry':
-                    emotionElement.innerHTML = '😠 Злость';
-                    break;
-                case 'love':
-                    emotionElement.innerHTML = '😍 Влюбленность';
-                    // Создаем несколько сердечек
-                    for (let i = 0; i < 5; i++) {
-                        setTimeout(() => createHeart(), i * 200);
-                    }
-                    break;
-                case 'neutral':
-                    emotionElement.innerHTML = '😐 Нейтрально';
-                    break;
-            }
-        }
-
-        // Остальной код (initStemmer, analyzeMessage, generateResponse, updateMoodVisual, interact, addMessage, showMoodChange, sendMessage) остается без изменений, как в предыдущем примере
         // Инициализация стеммера
         function initStemmer() {
             try {
@@ -718,6 +396,73 @@
             }
         }
 
+        function setEmotion(emotion) {
+            currentEmotion = emotion;
+
+            // Обновляем изображение аватара
+            const avatarImage = document.getElementById('avatar-image');
+            avatarImage.src = avatarImages[emotion];
+
+            // Анимируем изменение
+            avatarImage.style.animation = 'none';
+            setTimeout(() => {
+                avatarImage.style.animation = 'avatarPulse 0.5s ease, avatarTilt 1s ease';
+            }, 10);
+
+            // Обновляем индикатор эмоции
+            const emotionElement = document.getElementById('current-emotion');
+            emotionElement.className = 'emotion-badge ' + emotion;
+
+            switch(emotion) {
+                case 'happy':
+                    emotionElement.innerHTML = '😊 Радость';
+                    break;
+                case 'sad':
+                    emotionElement.innerHTML = '😢 Грусть';
+                    break;
+                case 'angry':
+                    emotionElement.innerHTML = '😠 Злость';
+                    break;
+                case 'love':
+                    emotionElement.innerHTML = '😍 Влюбленность';
+                    // Создаем несколько сердечек
+                    for (let i = 0; i < 5; i++) {
+                        setTimeout(() => createHeart(), i * 200);
+                    }
+                    break;
+                case 'neutral':
+                    emotionElement.innerHTML = '😐 Нейтрально';
+                    break;
+            }
+        }
+
+        function createHeart() {
+            const heart = document.createElement('div');
+            heart.className = 'heart';
+            heart.style.left = Math.random() * 250 + 'px';
+            heart.style.top = '280px';
+            heart.style.opacity = '0';
+            heart.style.transform = 'scale(0)';
+
+            document.getElementById('hearts-container').appendChild(heart);
+
+            // Анимация появления и движения
+            setTimeout(() => {
+                heart.style.transition = 'all 1s ease-out';
+                heart.style.opacity = '1';
+                heart.style.transform = 'scale(1)';
+
+                setTimeout(() => {
+                    heart.style.opacity = '0';
+                    heart.style.transform = 'translateY(-100px) scale(0.5)';
+
+                    setTimeout(() => {
+                        heart.remove();
+                    }, 1000);
+                }, 500);
+            }, 10);
+        }
+
         function interact(action) {
             let message = "";
             let moodChange = 0;
@@ -742,6 +487,12 @@
                     moodChange = 15;
                     message = "Обнимашки! Мне так приятно, когда ты меня обнимаешь! 🤗";
                     setEmotion('love');
+                    // Анимация объятий
+                    const avatarImage = document.getElementById('avatar-image');
+                    avatarImage.style.transform = 'scale(1.1)';
+                    setTimeout(() => {
+                        avatarImage.style.transform = 'scale(1)';
+                    }, 300);
                     break;
             }
 
@@ -819,11 +570,18 @@
             if (e.key === 'Enter') sendMessage();
         });
 
-        // Инициализируем стеммер и 3D сцену
+        // Инициализируем стеммер
         initStemmer();
-        init3DScene();
-        addMessage("Девушка", "Привет! Я твоя виртуальная подруга с 3D аватаром! 💖");
+        addMessage("Девушка", "Привет! Я твоя виртуальная подруга с анимированным аватаром! 💖");
         updateMoodVisual();
+
+        // Добавляем базовую анимацию для аватара
+        setInterval(() => {
+            const avatarImage = document.getElementById('avatar-image');
+            if (Math.random() > 0.7 && currentEmotion !== 'sad' && currentEmotion !== 'angry') {
+                avatarImage.style.animation = 'avatarPulse 0.8s ease';
+            }
+        }, 5000);
     </script>
 </body>
 </html>
