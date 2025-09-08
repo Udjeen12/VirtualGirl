@@ -210,7 +210,7 @@
                     // Проверяем плохие корни
                     badWordRoots.forEach(badRoot => {
                         if (stem.includes(badRoot)) {
-                            score -= 4;
+                            score -= 15;
                             foundBadWords.push({word, stem});
                         }
                     });
