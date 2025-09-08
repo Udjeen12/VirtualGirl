@@ -16,54 +16,128 @@
             max-width: 500px;
             margin: 0 auto;
         }
-        <div class="girl-container" id="girl-avatar">
-            <!-- Вместо emoji используем <img> -->
-            <img id="girl-image" src="girl.png" alt="girl" />
-        </div>
+        .girl-container {
+            margin: 20px auto;
+            width: 200px;
+            height: 200px;
+            background: white;
+            border-radius: 50%;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.2);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 4em;
+            transition: all 0.3s ease;
+            overflow: hidden;
+        }
+        .girl-image {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transition: all 0.3s ease;
+        }
+        .mood-happy { background: #ffeb3b; }
+        .mood-good { background: #4caf50; }
+        .mood-neutral { background: #ff9800; }
+        .mood-sad { background: #f44336; }
 
-        <style>
-        .girl-container img {
-            width: 150px;
-            height: auto;
+        button {
+            padding: 12px 24px;
+            margin: 8px;
+            border: none;
+            border-radius: 25px;
+            background: linear-gradient(45deg, #ff6b6b, #ee5a24);
+            color: white;
+            cursor: pointer;
+            font-weight: bold;
+            transition: transform 0.2s;
+        }
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+        }
+
+        .chat-container {
+            margin-top: 25px;
+            background: white;
+            border-radius: 20px;
+            padding: 20px;
+            box-shadow: 0 8px 25px rgba(0,0,0,0.1);
+        }
+
+        #chat-messages {
+            height: 200px;
+            overflow-y: auto;
+            text-align: left;
+            margin-bottom: 15px;
+            padding: 15px;
+            border: 2px solid #ffeaa7;
             border-radius: 15px;
-            transition: transform 0.3s ease, filter 0.3s ease;
+            background: #fff9e6;
         }
 
-        /* Анимации по настроению */
-        .mood-happy img {
-            animation: bounce 1s infinite;
-        }
-        .mood-good img {
-            filter: brightness(1.1) contrast(1.1);
-        }
-        .mood-neutral img {
-            filter: grayscale(0.3);
-        }
-        .mood-sad img {
-            filter: grayscale(0.7) brightness(0.8);
-            animation: sad-shake 1.2s infinite;
+        #user-input {
+            width: 65%;
+            padding: 12px;
+            border: 2px solid #74b9ff;
+            border-radius: 20px;
+            font-size: 16px;
+            outline: none;
         }
 
-        @keyframes bounce {
-            0%, 100% { transform: translateY(0); }
-            50% { transform: translateY(-10px); }
+        #send-btn {
+            padding: 12px 20px;
+            background: linear-gradient(45deg, #74b9ff, #0984e3);
         }
 
-        @keyframes sad-shake {
-            0% { transform: translateX(0); }
-            25% { transform: translateX(-3px); }
-            50% { transform: translateX(3px); }
-            75% { transform: translateX(-3px); }
-            100% { transform: translateX(0); }
+        .message {
+            margin: 10px 0;
+            padding: 12px;
+            border-radius: 20px;
+            animation: fadeIn 0.3s;
         }
-</style>
 
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .user-message {
+            background: linear-gradient(45deg, #74b9ff, #0984e3);
+            color: white;
+            text-align: right;
+            margin-left: 50px;
+        }
+
+        .bot-message {
+            background: linear-gradient(45deg, #fd79a8, #e84393);
+            color: white;
+            margin-right: 50px;
+        }
+
+        .typing {
+            display: inline-block;
+            animation: typing 1s infinite;
+        }
+
+        @keyframes typing {
+            0%, 100% { opacity: 0.3; }
+            50% { opacity: 1; }
+        }
+
+        .mood-change {
+            font-size: 12px;
+            color: #666;
+            text-align: center;
+            margin: 5px 0;
+        }
+    </style>
 </head>
 <body>
     <h1 style="color: #2d3436;">🌸 Виртуальная девушка с AI 🌸</h1>
 
     <div class="girl-container" id="girl-avatar">
-        <span id="girl-emoji">😊</span>
+        <img id="girl-image" src="girl_happy.png" alt="Девушка" class="girl-image" />
     </div>
 
     <div id="mood-indicator">
@@ -83,6 +157,16 @@
             <input type="text" id="user-input" placeholder="Напиши что-нибудь милое...">
             <button id="send-btn" onclick="sendMessage()">✨ Отправить</button>
         </div>
+    </div>
+
+    <!-- Предзагрузка изображений -->
+    <!-- Предзагрузка изображений -->
+    <div style="display: none;">
+        <img src="file:///D:/python/VirtualGirl/girl_happy.png" alt="Preload">
+        <img src="file:///D:/python/VirtualGirl/girl_good.png" alt="Preload">
+        <img src="file:///D:/python/VirtualGirl/girl_neutral.png" alt="Preload">
+        <img src="file:///D:/python/VirtualGirl/girl_sad.png" alt="Preload">
+        <img src="file:///D:/python/VirtualGirl/girl_very_sad.png" alt="Preload">
     </div>
 
     <script>
@@ -229,38 +313,34 @@
             }
         }
 
-        const trainingData = [
-            "Привет! Как твои дела?",
-            "Я так рада тебя видеть!",
-            "Что нового у тебя?",
-            "Мне нравится с тобой разговаривать",
-            "Расскажи что-нибудь интересное",
-            "Ты такой милый!",
-            "Хочешь поиграем во что-нибудь?",
-            "Я сегодня в хорошем настроении",
-            "Спасибо, что ты есть у меня",
-            "Ты мне так нравишься!"
-        ];
-
         function updateMoodVisual() {
             const avatar = document.getElementById('girl-avatar');
+            const girlImage = document.getElementById('girl-image');
             const moodValue = document.getElementById('mood-value');
 
             mood = Math.max(0, Math.min(100, mood));
             moodValue.textContent = mood;
 
             avatar.className = 'girl-container';
+
+            // Устанавливаем соответствующее изображение в зависимости от настроения
             if (mood > 75) {
+                girlImage.src = "file:///D:/python/VirtualGirl/girl_happy.png";
                 avatar.classList.add('mood-happy');
             } else if (mood > 50) {
+                girlImage.src = "file:///D:/python/VirtualGirl/girl_good.png";
                 avatar.classList.add('mood-good');
             } else if (mood > 25) {
+                girlImage.src = "file:///D:/python/VirtualGirl/girl_neutral.png";
                 avatar.classList.add('mood-neutral');
+            } else if (mood > 10) {
+                girlImage.src = "file:///D:/python/VirtualGirl/girl_sad.png";
+                avatar.classList.add('mood-sad');
             } else {
+                girlImage.src = "file:///D:/python/VirtualGirl/girl_very_sad.png";
                 avatar.classList.add('mood-sad');
             }
         }
-
 
         function interact(action) {
             let message = "";
